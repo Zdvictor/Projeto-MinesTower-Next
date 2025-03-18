@@ -1,3 +1,5 @@
+Acesse meu Projeto https://projeto-mines-tower-next.vercel.app/
+
 # 🚀 MinesTower
 
 **MinesTower** é um jogo interativo desenvolvido com uma interface gráfica moderna e uma lógica de programação envolvente. O jogo desafia os usuários a aumentar seu saldo, podendo ganhar ou realizar cashout a qualquer momento.
