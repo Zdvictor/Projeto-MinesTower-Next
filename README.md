@@ -1,4 +1,4 @@
-Acesse meu Projeto https://projeto-mines-tower-next.vercel.app/
+Acesse meu Jogo: https://projeto-mines-tower-next.vercel.app/
 
 # 🚀 MinesTower
 
