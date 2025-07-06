@@ -7,6 +7,7 @@ const ROWS = 5
 const COLS = 5
 
 type CellStatus = 'hidden' | 'diamond' | 'bomb'
+type Difficulty = 'facil' | 'medio' | 'dificil' | 'extremo'
 
 interface Cell {
   status: CellStatus
@@ -14,6 +15,17 @@ interface Cell {
   realStatus: CellStatus
   row: number
   col: number
+}
+
+interface GameResult {
+  id: string
+  date: Date
+  betAmount: number
+  winAmount: number
+  multiplier: number
+  difficulty: string
+  isWin: boolean
+  stoppedAtRow: number
 }
 
 export function useGameState() {
@@ -25,6 +37,12 @@ export function useGameState() {
   const [currentRow, setCurrentRow] = useState(0)
   const [showWinMessage, setShowWinMessage] = useState(false)
   const [winAmount, setWinAmount] = useState(0)
+  const [showRechargeMessage, setShowRechargeMessage] = useState(false)
+  const [gameHistory, setGameHistory] = useState<GameResult[]>([])
+  const [winStreak, setWinStreak] = useState(0)
+  const [bestMultiplier, setBestMultiplier] = useState(1)
+  const [totalWins, setTotalWins] = useState(0)
+  const [totalGames, setTotalGames] = useState(0)
   const [cells, setCells] = useState<Cell[]>(() => 
     Array(ROWS * COLS).fill(null).map((_, index) => ({
       status: 'hidden',
@@ -34,7 +52,7 @@ export function useGameState() {
       col: index % COLS
     }))
   )
-  const [difficulty, setDifficulty] = useState<'facil' | 'medio' | 'dificil' | 'extremo'>('facil')
+  const [difficulty, setDifficulty] = useState<Difficulty>('facil')
   const [winAudio, setWinAudio] = useState<HTMLAudioElement | null>(null)
   const [loseAudio, setLoseAudio] = useState<HTMLAudioElement | null>(null)
   const [diamondAudio, setDiamondAudio] = useState<HTMLAudioElement | null>(null)
@@ -54,7 +72,34 @@ export function useGameState() {
       setBalance(Number(savedBalance))
     }
 
-    // Inicializa os áudios apenas no lado do cliente
+    // Carrega o histórico do localStorage
+    const savedHistory = localStorage.getItem('gameHistory')
+    if (savedHistory) {
+      const parsedHistory = JSON.parse(savedHistory, (key, value) => {
+        if (key === 'date') return new Date(value)
+        return value
+      })
+      setGameHistory(parsedHistory)
+      
+      // Recalcula as estatísticas
+      const wins = parsedHistory.filter((game: GameResult) => game.isWin).length
+      setTotalWins(wins)
+      setTotalGames(parsedHistory.length)
+      
+      // Calcula a sequência atual de vitórias
+      let streak = 0
+      for (let i = parsedHistory.length - 1; i >= 0; i--) {
+        if (parsedHistory[i].isWin) streak++
+        else break
+      }
+      setWinStreak(streak)
+      
+      // Encontra o melhor multiplicador
+      const bestMult = Math.max(...parsedHistory.map((game: GameResult) => game.multiplier))
+      setBestMultiplier(bestMult)
+    }
+
+    // Inicializa os áudios
     const win = new Audio('/audio/win.mp3')
     win.volume = 0.5
     setWinAudio(win)
@@ -77,6 +122,37 @@ export function useGameState() {
       localStorage.setItem('balance', String(balance))
     }
   }, [balance, isClient])
+
+  useEffect(() => {
+    if (isClient && gameHistory.length > 0) {
+      localStorage.setItem('gameHistory', JSON.stringify(gameHistory))
+    }
+  }, [gameHistory, isClient])
+
+  const addGameToHistory = (result: Omit<GameResult, 'id' | 'date'>) => {
+    const newGame: GameResult = {
+      ...result,
+      id: crypto.randomUUID(),
+      date: new Date()
+    }
+
+    setGameHistory(prev => {
+      const newHistory = [newGame, ...prev].slice(0, 50) // Mantém apenas as últimas 50 jogadas
+      return newHistory
+    })
+
+    setTotalGames(prev => prev + 1)
+    
+    if (result.isWin) {
+      setTotalWins(prev => prev + 1)
+      setWinStreak(prev => prev + 1)
+      if (result.multiplier > bestMultiplier) {
+        setBestMultiplier(result.multiplier)
+      }
+    } else {
+      setWinStreak(0)
+    }
+  }
 
   const playSound = (type: 'win' | 'lose' | 'diamond' | 'bomb') => {
     if (!isClient) return
@@ -148,6 +224,16 @@ export function useGameState() {
         cell.status = cell.realStatus
       })
       setCells(newCells)
+      
+      // Adiciona a derrota ao histórico
+      addGameToHistory({
+        betAmount,
+        winAmount: 0,
+        multiplier: currentMultiplier,
+        difficulty,
+        isWin: false,
+        stoppedAtRow: currentRow
+      })
     } else {
       playSound('diamond')
       // Revela todas as células da linha atual
@@ -188,6 +274,17 @@ export function useGameState() {
     playSound('win')
     setWinAmount(finalWinAmount)
     setShowWinMessage(true)
+    
+    // Adiciona a vitória ao histórico
+    addGameToHistory({
+      betAmount,
+      winAmount: finalWinAmount,
+      multiplier: currentMultiplier,
+      difficulty,
+      isWin: true,
+      stoppedAtRow: currentRow
+    })
+    
     // Timer para esconder a mensagem após 4 segundos
     setTimeout(() => {
       setShowWinMessage(false)
@@ -199,6 +296,15 @@ export function useGameState() {
       revealed: true,
       status: cell.realStatus
     })))
+  }
+
+  const rechargeBalance = () => {
+    setBalance(INITIAL_BALANCE)
+    setShowRechargeMessage(true)
+    // Esconde a mensagem após 3 segundos
+    setTimeout(() => {
+      setShowRechargeMessage(false)
+    }, 3000)
   }
 
   return {
@@ -216,6 +322,13 @@ export function useGameState() {
     setDifficulty,
     currentRow,
     showWinMessage,
-    winAmount
+    winAmount,
+    rechargeBalance,
+    showRechargeMessage,
+    gameHistory,
+    winStreak,
+    bestMultiplier,
+    totalWins,
+    totalGames
   }
 } 
